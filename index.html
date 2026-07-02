@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UK EV Range Map</title>
+  <script>
+    (() => {
+      const param = new URLSearchParams(window.location.search).get("clawpilotTheme");
+      const theme =
+        param || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    })();
+  </script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <style>
+    :root {
+      color-scheme: light;
+      --cp-bg: #f7f4ef;
+      --cp-bg-elevated: #fcfbf8;
+      --cp-surface: #ffffff;
+      --cp-surface-soft: #f5f5f5;
+      --cp-border: #dedede;
+      --cp-border-strong: #919191;
+      --cp-text: #242424;
+      --cp-text-muted: #5c5c5c;
+      --cp-text-soft: #6f6f6f;
+      --cp-accent: #b11f4b;
+      --cp-accent-hover: #9a1a41;
+      --cp-accent-soft: rgba(177, 31, 75, 0.08);
+      --cp-accent-fg: #ffffff;
+      --cp-success: #16a34a;
+      --cp-danger: #dc2626;
+      --cp-warning: #f59e0b;
+      --cp-link: #0078d4;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.12);
+      --cp-overlay: rgba(255, 255, 255, 0.8);
+      --cp-panel: rgba(255, 255, 255, 0.86);
+      --cp-panel-strong: rgba(255, 255, 255, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.55);
+      --cp-highlight: rgba(177, 31, 75, 0.12);
+    }
+    html[data-theme="dark"] {
+      color-scheme: dark;
+      --cp-bg: #3d3b3a;
+      --cp-bg-elevated: #343231;
+      --cp-surface: #292929;
+      --cp-surface-soft: #2e2e2e;
+      --cp-border: #474747;
+      --cp-border-strong: #5f5f5f;
+      --cp-text: #dedede;
+      --cp-text-muted: #919191;
+      --cp-text-soft: #b0b0b0;
+      --cp-accent: #fd8ea1;
+      --cp-accent-hover: #fb7b91;
+      --cp-accent-soft: rgba(253, 142, 161, 0.14);
+      --cp-accent-fg: #1a1a1a;
+      --cp-success: #4ade80;
+      --cp-danger: #f87171;
+      --cp-warning: #fbbf24;
+      --cp-link: #4da6ff;
+      --cp-shadow: 0 18px 48px rgba(0, 0, 0, 0.32);
+      --cp-overlay: rgba(41, 41, 41, 0.88);
+      --cp-panel: rgba(41, 41, 41, 0.72);
+      --cp-panel-strong: rgba(41, 41, 41, 0.96);
+      --cp-sheen: rgba(255, 255, 255, 0.04);
+      --cp-highlight: rgba(253, 142, 161, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--cp-bg);
+      color: var(--cp-text);
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(320px, 420px) 1fr;
+      min-height: 100vh;
+    }
+
+    aside {
+      padding: 24px;
+      background: var(--cp-bg-elevated);
+      border-right: 1px solid var(--cp-border);
+      overflow-y: auto;
+    }
+
+    main {
+      min-height: 100vh;
+      position: relative;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.65rem;
+      line-height: 1.15;
+    }
+
+    p {
+      margin: 0;
+      color: var(--cp-text-muted);
+      line-height: 1.45;
+    }
+
+    form {
+      margin-top: 24px;
+      display: grid;
+      gap: 16px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      color: var(--cp-text);
+      font-weight: 600;
+    }
+
+    input,
+    select,
+    button {
+      width: 100%;
+      border-radius: 0.625rem;
+      font: inherit;
+    }
+
+    input,
+    select {
+      padding: 10px 12px;
+      color: var(--cp-text);
+      background: var(--cp-surface);
+      border: 1px solid var(--cp-border);
+      outline: none;
+    }
+
+    input:focus,
+    select:focus {
+      border-color: var(--cp-accent);
+      box-shadow: 0 0 0 3px var(--cp-accent-soft);
+    }
+
+    button {
+      margin-top: 4px;
+      padding: 12px 14px;
+      color: var(--cp-accent-fg);
+      background: var(--cp-accent);
+      border: 1px solid var(--cp-accent);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: var(--cp-accent-hover);
+      border-color: var(--cp-accent-hover);
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+
+    .card {
+      margin-top: 20px;
+      padding: 16px;
+      background: var(--cp-surface);
+      border: 1px solid var(--cp-border);
+      border-radius: 16px;
+      box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+    }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .stat {
+      padding: 12px;
+      background: var(--cp-surface-soft);
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+    }
+
+    .stat span {
+      display: block;
+      color: var(--cp-text-muted);
+      font-size: 0.78rem;
+    }
+
+    .stat strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--cp-text);
+      font-size: 1.15rem;
+    }
+
+    .status {
+      margin-top: 12px;
+      padding: 12px;
+      border: 1px solid var(--cp-border);
+      border-radius: 0.625rem;
+      color: var(--cp-text);
+      background: var(--cp-surface-soft);
+      line-height: 1.4;
+    }
+
+    .status.good {
+      border-color: var(--cp-success);
+    }
+
+    .status.warn {
+      border-color: var(--cp-warning);
+    }
+
+    .status.bad {
+      border-color: var(--cp-danger);
+    }
+
+    .hint {
+      margin-top: 16px;
+      font-size: 0.9rem;
+    }
+
+    .api-note {
+      margin-top: 14px;
+      font-size: 0.82rem;
+      color: var(--cp-text-soft);
+    }
+
+    #map {
+      position: absolute;
+      inset: 0;
+      min-height: 100vh;
+      background: var(--cp-surface-soft);
+    }
+
+    .leaflet-container {
+      font-family: "Segoe UI", Aptos, Calibri, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--cp-surface-soft);
+    }
+
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+      background: var(--cp-surface);
+      color: var(--cp-text);
+      border: 1px solid var(--cp-border);
+      box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+    }
+
+    .leaflet-control-attribution,
+    .leaflet-control-zoom a {
+      color: var(--cp-text) !important;
+      background: var(--cp-panel-strong) !important;
+      border-color: var(--cp-border) !important;
+    }
+
+    .pin {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      color: var(--cp-accent-fg);
+      background: var(--cp-accent);
+      border: 2px solid var(--cp-surface);
+      border-radius: 50% 50% 50% 0;
+      box-shadow: 0 0 2px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.14);
+      font-weight: 800;
+      transform: rotate(-45deg);
+    }
+
+    .pin span {
+      transform: rotate(45deg);
+    }
+
+    .pin.destination {
+      background: var(--cp-success);
+    }
+
+    @media (max-width: 860px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      aside {
+        border-right: 0;
+        border-bottom: 1px solid var(--cp-border);
+      }
+
+      main,
+      #map {
+        position: relative;
+        min-height: 62vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>UK EV Range Map</h1>
+      <p>Enter a UK route and vehicle details to estimate usable range, plot the route, and shade the maximum reachable area from the start postcode.</p>
+
+      <form id="rangeForm">
+        <label>
+          Start postcode
+          <input id="startPostcode" autocomplete="postal-code" placeholder="e.g. SW1A 1AA" required>
+        </label>
+
+        <label>
+          Destination postcode
+          <input id="destinationPostcode" autocomplete="postal-code" placeholder="e.g. EH1 1YZ" required>
+        </label>
+
+        <label>
+          Vehicle make / model
+          <select id="vehicle" required></select>
+        </label>
+
+        <label>
+          Year of manufacture
+          <input id="year" type="number" min="2010" max="2026" step="1" value="2024" required>
+        </label>
+
+        <button id="calculateButton" type="submit">Calculate route and range</button>
+      </form>
+
+      <section class="card" aria-live="polite">
+        <div class="stat-grid">
+          <div class="stat">
+            <span>Estimated usable range</span>
+            <strong id="rangeStat">-</strong>
+          </div>
+          <div class="stat">
+            <span>Route distance</span>
+            <strong id="distanceStat">-</strong>
+          </div>
+          <div class="stat">
+            <span>Battery margin</span>
+            <strong id="marginStat">-</strong>
+          </div>
+          <div class="stat">
+            <span>Trip status</span>
+            <strong id="tripStat">Waiting</strong>
+          </div>
+        </div>
+        <div id="status" class="status">Complete the form to calculate the EV range and route.</div>
+      </section>
+
+      <p class="hint">The shaded area is clipped to detailed UK and Ireland coastline geometry instead of a perfect circle. Actual drivable reach depends on roads, weather, speed, elevation, payload, battery condition, and charger availability.</p>
+      <p class="api-note">Runtime data: postcodes.io for UK postcode lookup, OSRM for driving routes, OpenStreetMap map tiles, Natural Earth coastline geometry, and indicative manufacturer WLTP ranges for UK-market EVs.</p>
+    </aside>
+
+    <main>
+      <div id="map" role="application" aria-label="Map showing EV range, postcode pins, and route"></div>
+    </main>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js" crossorigin=""></script>
+  <script>
+    const vehicles = [
+      { id: "abarth-500e", label: "Abarth 500e", rangeKm: 265 },
+      { id: "alfa-romeo-junior-elettrica", label: "Alfa Romeo Junior Elettrica", rangeKm: 410 },
+      { id: "alpine-a290", label: "Alpine A290", rangeKm: 380 },
+      { id: "audi-a6-sportback-etron", label: "Audi A6 Sportback e-tron", rangeKm: 750 },
+      { id: "audi-e-tron-gt", label: "Audi e-tron GT", rangeKm: 605 },
+      { id: "audi-q4-etron", label: "Audi Q4 e-tron", rangeKm: 562 },
+      { id: "audi-q6-etron", label: "Audi Q6 e-tron", rangeKm: 625 },
+      { id: "audi-q8-etron", label: "Audi Q8 e-tron", rangeKm: 582 },
+      { id: "bmw-i4-edrive35", label: "BMW i4 eDrive35", rangeKm: 500 },
+      { id: "bmw-i4-edrive40", label: "BMW i4 eDrive40", rangeKm: 590 },
+      { id: "bmw-i5-edrive40", label: "BMW i5 eDrive40", rangeKm: 582 },
+      { id: "bmw-i7-xdrive60", label: "BMW i7 xDrive60", rangeKm: 624 },
+      { id: "bmw-ix-xdrive40", label: "BMW iX xDrive40", rangeKm: 425 },
+      { id: "bmw-ix-xdrive50", label: "BMW iX xDrive50", rangeKm: 630 },
+      { id: "bmw-ix1-edrive20", label: "BMW iX1 eDrive20", rangeKm: 474 },
+      { id: "bmw-ix2-edrive20", label: "BMW iX2 eDrive20", rangeKm: 478 },
+      { id: "byd-atto-3", label: "BYD Atto 3", rangeKm: 420 },
+      { id: "byd-dolphin", label: "BYD Dolphin", rangeKm: 427 },
+      { id: "byd-seal", label: "BYD Seal", rangeKm: 570 },
+      { id: "byd-seal-u", label: "BYD Seal U", rangeKm: 500 },
+      { id: "byd-sealion-7", label: "BYD Sealion 7", rangeKm: 502 },
+      { id: "citroen-e-berlingo", label: "Citroen e-Berlingo", rangeKm: 345 },
+      { id: "citroen-e-c3", label: "Citroen e-C3", rangeKm: 320 },
+      { id: "citroen-e-c4", label: "Citroen e-C4", rangeKm: 420 },
+      { id: "citroen-e-c4-x", label: "Citroen e-C4 X", rangeKm: 420 },
+      { id: "citroen-e-spacetourer", label: "Citroen e-SpaceTourer", rangeKm: 350 },
+      { id: "cupra-born", label: "Cupra Born", rangeKm: 550 },
+      { id: "cupra-tavascan", label: "Cupra Tavascan", rangeKm: 568 },
+      { id: "dacia-spring", label: "Dacia Spring", rangeKm: 225 },
+      { id: "ds-3-e-tense", label: "DS 3 E-Tense", rangeKm: 404 },
+      { id: "ds-no8", label: "DS No8", rangeKm: 750 },
+      { id: "fiat-500e", label: "Fiat 500e", rangeKm: 320 },
+      { id: "fiat-600e", label: "Fiat 600e", rangeKm: 409 },
+      { id: "ford-capri", label: "Ford Capri Electric", rangeKm: 627 },
+      { id: "ford-explorer", label: "Ford Explorer Electric", rangeKm: 602 },
+      { id: "ford-mustang-mach-e", label: "Ford Mustang Mach-E Extended Range", rangeKm: 600 },
+      { id: "ford-puma-gen-e", label: "Ford Puma Gen-E", rangeKm: 376 },
+      { id: "genesis-electrified-g80", label: "Genesis Electrified G80", rangeKm: 520 },
+      { id: "genesis-electrified-gv70", label: "Genesis Electrified GV70", rangeKm: 455 },
+      { id: "genesis-gv60", label: "Genesis GV60", rangeKm: 517 },
+      { id: "gwm-ora-03", label: "GWM Ora 03", rangeKm: 420 },
+      { id: "honda-eny1", label: "Honda e:Ny1", rangeKm: 412 },
+      { id: "hyundai-inster", label: "Hyundai Inster", rangeKm: 370 },
+      { id: "hyundai-ioniq-5", label: "Hyundai Ioniq 5", rangeKm: 570 },
+      { id: "hyundai-ioniq-6", label: "Hyundai Ioniq 6", rangeKm: 614 },
+      { id: "hyundai-kona-electric", label: "Hyundai Kona Electric", rangeKm: 514 },
+      { id: "jeep-avenger-electric", label: "Jeep Avenger Electric", rangeKm: 400 },
+      { id: "kia-ev3", label: "Kia EV3", rangeKm: 605 },
+      { id: "kia-ev6", label: "Kia EV6", rangeKm: 582 },
+      { id: "kia-ev9", label: "Kia EV9", rangeKm: 563 },
+      { id: "kia-niro-ev", label: "Kia Niro EV", rangeKm: 460 },
+      { id: "kia-soul-ev", label: "Kia Soul EV", rangeKm: 452 },
+      { id: "kgm-torres-evx", label: "KGM Torres EVX", rangeKm: 462 },
+      { id: "leapmotor-c10", label: "Leapmotor C10", rangeKm: 420 },
+      { id: "leapmotor-t03", label: "Leapmotor T03", rangeKm: 265 },
+      { id: "lexus-rz", label: "Lexus RZ", rangeKm: 440 },
+      { id: "lexus-ux-300e", label: "Lexus UX 300e", rangeKm: 450 },
+      { id: "lotus-eletre", label: "Lotus Eletre", rangeKm: 600 },
+      { id: "lotus-emeya", label: "Lotus Emeya", rangeKm: 610 },
+      { id: "maserati-granturismo-folgore", label: "Maserati GranTurismo Folgore", rangeKm: 455 },
+      { id: "maserati-grecale-folgore", label: "Maserati Grecale Folgore", rangeKm: 500 },
+      { id: "maxus-mifa-9", label: "Maxus MIFA 9", rangeKm: 430 },
+      { id: "mazda-mx-30", label: "Mazda MX-30", rangeKm: 200 },
+      { id: "mercedes-benz-eqa-250", label: "Mercedes-Benz EQA 250+", rangeKm: 560 },
+      { id: "mercedes-benz-eqb-250", label: "Mercedes-Benz EQB 250+", rangeKm: 535 },
+      { id: "mercedes-benz-eqe-saloon", label: "Mercedes-Benz EQE Saloon", rangeKm: 690 },
+      { id: "mercedes-benz-eqe-suv", label: "Mercedes-Benz EQE SUV", rangeKm: 590 },
+      { id: "mercedes-benz-eqs-saloon", label: "Mercedes-Benz EQS Saloon", rangeKm: 770 },
+      { id: "mercedes-benz-eqs-suv", label: "Mercedes-Benz EQS SUV", rangeKm: 660 },
+      { id: "mercedes-benz-eqv", label: "Mercedes-Benz EQV", rangeKm: 365 },
+      { id: "mercedes-benz-g580", label: "Mercedes-Benz G 580 with EQ Technology", rangeKm: 473 },
+      { id: "mg-cyberster", label: "MG Cyberster", rangeKm: 510 },
+      { id: "mg-mg4-ev", label: "MG4 EV", rangeKm: 520 },
+      { id: "mg-mg5-ev", label: "MG5 EV", rangeKm: 403 },
+      { id: "mg-zs-ev", label: "MG ZS EV", rangeKm: 440 },
+      { id: "mini-aceman", label: "MINI Aceman Electric", rangeKm: 405 },
+      { id: "mini-cooper-electric", label: "MINI Cooper Electric", rangeKm: 402 },
+      { id: "mini-countryman-electric", label: "MINI Countryman Electric", rangeKm: 462 },
+      { id: "nissan-ariya", label: "Nissan Ariya", rangeKm: 536 },
+      { id: "nissan-leaf-40", label: "Nissan Leaf 40 kWh", rangeKm: 270 },
+      { id: "nissan-leaf-eplus", label: "Nissan Leaf e+ 62 kWh", rangeKm: 385 },
+      { id: "peugeot-e-2008", label: "Peugeot E-2008", rangeKm: 406 },
+      { id: "peugeot-e-208", label: "Peugeot E-208", rangeKm: 410 },
+      { id: "peugeot-e-3008", label: "Peugeot E-3008", rangeKm: 700 },
+      { id: "peugeot-e-308", label: "Peugeot E-308", rangeKm: 410 },
+      { id: "peugeot-e-5008", label: "Peugeot E-5008", rangeKm: 660 },
+      { id: "peugeot-e-rifter", label: "Peugeot E-Rifter", rangeKm: 340 },
+      { id: "peugeot-e-traveller", label: "Peugeot E-Traveller", rangeKm: 350 },
+      { id: "polestar-2-long-range", label: "Polestar 2 Long Range", rangeKm: 655 },
+      { id: "polestar-3", label: "Polestar 3", rangeKm: 650 },
+      { id: "polestar-4", label: "Polestar 4", rangeKm: 620 },
+      { id: "porsche-macan-electric", label: "Porsche Macan Electric", rangeKm: 641 },
+      { id: "porsche-taycan", label: "Porsche Taycan", rangeKm: 678 },
+      { id: "renault-4-e-tech", label: "Renault 4 E-Tech Electric", rangeKm: 400 },
+      { id: "renault-5-e-tech", label: "Renault 5 E-Tech Electric", rangeKm: 410 },
+      { id: "renault-kangoo-e-tech", label: "Renault Kangoo E-Tech", rangeKm: 285 },
+      { id: "renault-megane-e-tech", label: "Renault Megane E-Tech Electric", rangeKm: 470 },
+      { id: "renault-scenic-e-tech", label: "Renault Scenic E-Tech Electric", rangeKm: 625 },
+      { id: "renault-zoe-ze50", label: "Renault Zoe ZE50", rangeKm: 395 },
+      { id: "rolls-royce-spectre", label: "Rolls-Royce Spectre", rangeKm: 530 },
+      { id: "skoda-elroq", label: "Skoda Elroq", rangeKm: 560 },
+      { id: "skoda-enyaq", label: "Skoda Enyaq", rangeKm: 570 },
+      { id: "smart-1", label: "Smart #1", rangeKm: 440 },
+      { id: "smart-3", label: "Smart #3", rangeKm: 455 },
+      { id: "subaru-solterra", label: "Subaru Solterra", rangeKm: 466 },
+      { id: "tesla-model-3-long-range", label: "Tesla Model 3 Long Range", rangeKm: 629 },
+      { id: "tesla-model-3-performance", label: "Tesla Model 3 Performance", rangeKm: 528 },
+      { id: "tesla-model-3-rwd", label: "Tesla Model 3 RWD", rangeKm: 513 },
+      { id: "tesla-model-s", label: "Tesla Model S", rangeKm: 634 },
+      { id: "tesla-model-x", label: "Tesla Model X", rangeKm: 576 },
+      { id: "tesla-model-y-long-range", label: "Tesla Model Y Long Range", rangeKm: 533 },
+      { id: "tesla-model-y-rwd", label: "Tesla Model Y RWD", rangeKm: 455 },
+      { id: "toyota-bz4x", label: "Toyota bZ4X", rangeKm: 513 },
+      { id: "vauxhall-astra-electric", label: "Vauxhall Astra Electric", rangeKm: 418 },
+      { id: "vauxhall-combo-life-electric", label: "Vauxhall Combo Life Electric", rangeKm: 345 },
+      { id: "vauxhall-corsa-electric", label: "Vauxhall Corsa Electric", rangeKm: 405 },
+      { id: "vauxhall-frontera-electric", label: "Vauxhall Frontera Electric", rangeKm: 305 },
+      { id: "vauxhall-grandland-electric", label: "Vauxhall Grandland Electric", rangeKm: 700 },
+      { id: "vauxhall-mokka-electric", label: "Vauxhall Mokka Electric", rangeKm: 406 },
+      { id: "vauxhall-vivaro-life-electric", label: "Vauxhall Vivaro Life Electric", rangeKm: 350 },
+      { id: "volkswagen-id-buzz", label: "Volkswagen ID. Buzz", rangeKm: 474 },
+      { id: "volkswagen-id3-pro", label: "Volkswagen ID.3 Pro", rangeKm: 426 },
+      { id: "volkswagen-id4-pro", label: "Volkswagen ID.4 Pro", rangeKm: 531 },
+      { id: "volkswagen-id5-pro", label: "Volkswagen ID.5 Pro", rangeKm: 556 },
+      { id: "volkswagen-id7", label: "Volkswagen ID.7", rangeKm: 709 },
+      { id: "volvo-em90", label: "Volvo EM90", rangeKm: 738 },
+      { id: "volvo-ex30", label: "Volvo EX30", rangeKm: 476 },
+      { id: "volvo-ex40", label: "Volvo EX40", rangeKm: 576 },
+      { id: "volvo-ex90", label: "Volvo EX90", rangeKm: 600 },
+      { id: "volvo-ec40", label: "Volvo EC40", rangeKm: 583 },
+      { id: "xpeng-g6", label: "XPeng G6", rangeKm: 570 },
+      { id: "zeekr-x", label: "Zeekr X", rangeKm: 440 },
+      { id: "generic-compact", label: "Generic compact EV", rangeKm: 330 },
+      { id: "generic-family", label: "Generic family EV", rangeKm: 430 },
+      { id: "generic-long-range", label: "Generic long-range EV", rangeKm: 560 }
+    ];
+
+    const form = document.getElementById("rangeForm");
+    const vehicleSelect = document.getElementById("vehicle");
+    const button = document.getElementById("calculateButton");
+    const rangeStat = document.getElementById("rangeStat");
+    const distanceStat = document.getElementById("distanceStat");
+    const marginStat = document.getElementById("marginStat");
+    const tripStat = document.getElementById("tripStat");
+    const statusBox = document.getElementById("status");
+    const rootStyles = getComputedStyle(document.documentElement);
+    const cssVar = (name) => rootStyles.getPropertyValue(name).trim();
+    const successColor = cssVar("--cp-success");
+    const accentColor = cssVar("--cp-accent");
+    const dangerColor = cssVar("--cp-danger");
+
+    vehicles.forEach((vehicle) => {
+      const option = document.createElement("option");
+      option.value = vehicle.id;
+      option.textContent = vehicle.label;
+      vehicleSelect.appendChild(option);
+    });
+    vehicleSelect.value = "tesla-model-3-long-range";
+
+    const map = L.map("map", {
+      center: [54.2, -2.7],
+      zoom: 6,
+      scrollWheelZoom: true
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    const layers = L.featureGroup().addTo(map);
+    const coastlineUrl = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_land.geojson";
+    let landGeometryPromise;
+
+    function markerIcon(label, className) {
+      return L.divIcon({
+        className: "",
+        html: `<div class="pin ${className}"><span>${label}</span></div>`,
+        iconSize: [30, 30],
+        iconAnchor: [15, 30],
+        popupAnchor: [0, -28]
+      });
+    }
+
+    function normalisePostcode(value) {
+      return value.trim().replace(/\s+/g, "").toUpperCase();
+    }
+
+    async function lookupPostcode(value) {
+      const postcode = normalisePostcode(value);
+      const response = await fetch(`https://api.postcodes.io/postcodes/${encodeURIComponent(postcode)}`);
+      const payload = await response.json();
+
+      if (!response.ok || payload.status !== 200 || !payload.result) {
+        throw new Error(`Postcode not found: ${value}`);
+      }
+
+      return {
+        postcode: payload.result.postcode,
+        lat: payload.result.latitude,
+        lon: payload.result.longitude
+      };
+    }
+
+    async function lookupRoute(start, destination) {
+      const coords = `${start.lon},${start.lat};${destination.lon},${destination.lat}`;
+      const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson&alternatives=false&steps=false`;
+      const response = await fetch(url);
+      const payload = await response.json();
+
+      if (!response.ok || payload.code !== "Ok" || !payload.routes?.length) {
+        throw new Error("A driving route could not be calculated for those postcodes.");
+      }
+
+      return payload.routes[0];
+    }
+
+    function estimateRangeKm(vehicle, year) {
+      const age = Math.max(0, 2026 - year);
+      const degradation = Math.min(age * 0.015, 0.25);
+      const usableWeatherAndReserveFactor = 0.88;
+      return vehicle.rangeKm * (1 - degradation) * usableWeatherAndReserveFactor;
+    }
+
+    function isPointInRing(point, ring) {
+      let inside = false;
+      const x = point.lon;
+      const y = point.lat;
+
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const xi = ring[i][0];
+        const yi = ring[i][1];
+        const xj = ring[j][0];
+        const yj = ring[j][1];
+        const intersects = ((yi > y) !== (yj > y)) &&
+          (x < ((xj - xi) * (y - yi)) / (yj - yi) + xi);
+
+        if (intersects) {
+          inside = !inside;
+        }
+      }
+
+      return inside;
+    }
+
+    function ringBounds(ring) {
+      return ring.reduce((bounds, coord) => ({
+        minLon: Math.min(bounds.minLon, coord[0]),
+        maxLon: Math.max(bounds.maxLon, coord[0]),
+        minLat: Math.min(bounds.minLat, coord[1]),
+        maxLat: Math.max(bounds.maxLat, coord[1])
+      }), {
+        minLon: Infinity,
+        maxLon: -Infinity,
+        minLat: Infinity,
+        maxLat: -Infinity
+      });
+    }
+
+    function boundsContainPoint(bounds, point) {
+      return point.lon >= bounds.minLon &&
+        point.lon <= bounds.maxLon &&
+        point.lat >= bounds.minLat &&
+        point.lat <= bounds.maxLat;
+    }
+
+    function extractLandPolygons(featureCollection) {
+      return featureCollection.features.flatMap((feature) => {
+        if (feature.geometry.type === "Polygon") {
+          return [feature.geometry.coordinates];
+        }
+
+        if (feature.geometry.type === "MultiPolygon") {
+          return feature.geometry.coordinates;
+        }
+
+        return [];
+      });
+    }
+
+    async function loadLandGeometry() {
+      if (!landGeometryPromise) {
+        landGeometryPromise = fetch(coastlineUrl)
+          .then((response) => {
+            if (!response.ok) {
+              throw new Error("Detailed coastline geometry could not be loaded.");
+            }
+
+            return response.json();
+          })
+          .then(extractLandPolygons);
+      }
+
+      return landGeometryPromise;
+    }
+
+    function polygonContainsPoint(polygon, point) {
+      const outerRing = polygon[0];
+      const bounds = ringBounds(outerRing);
+
+      if (!boundsContainPoint(bounds, point) || !isPointInRing(point, outerRing)) {
+        return false;
+      }
+
+      return !polygon.slice(1).some((hole) => isPointInRing(point, hole));
+    }
+
+    async function loadUkIrelandLandPolygons() {
+      const polygons = await loadLandGeometry();
+      const landmassReferencePoints = [
+        { lat: 54.2, lon: -2.7 },
+        { lat: 53.4, lon: -8.0 }
+      ];
+      const selected = [];
+
+      landmassReferencePoints.forEach((point) => {
+        const polygon = polygons.find((candidate) => polygonContainsPoint(candidate, point));
+
+        if (polygon && !selected.includes(polygon)) {
+          selected.push(polygon);
+        }
+      });
+
+      if (selected.length !== landmassReferencePoints.length) {
+        throw new Error("UK and Ireland coastline geometry could not be loaded.");
+      }
+
+      return selected;
+    }
+
+    function buildCoastlineClippedRangeFeature(origin, rangeKm, landPolygons) {
+      if (!window.turf) {
+        throw new Error("The map geometry engine could not be loaded.");
+      }
+
+      const landFeature = landPolygons.length === 1
+        ? turf.polygon(landPolygons[0])
+        : turf.multiPolygon(landPolygons);
+      const rangeDisk = turf.circle([origin.lon, origin.lat], rangeKm, {
+        steps: 720,
+        units: "kilometers"
+      });
+      const clippedFeature = turf.intersect(landFeature, rangeDisk);
+
+      if (!clippedFeature) {
+        throw new Error("The EV range does not overlap the selected UK coastline area.");
+      }
+
+      return clippedFeature;
+    }
+
+    function kmToMiles(km) {
+      return km * 0.621371;
+    }
+
+    function formatMiles(km) {
+      return `${Math.round(kmToMiles(km)).toLocaleString("en-GB")} mi`;
+    }
+
+    function formatDistance(km) {
+      return `${Math.round(kmToMiles(km)).toLocaleString("en-GB")} mi`;
+    }
+
+    function setStatus(message, kind) {
+      statusBox.textContent = message;
+      statusBox.className = `status ${kind || ""}`.trim();
+    }
+
+    function resetStats() {
+      rangeStat.textContent = "-";
+      distanceStat.textContent = "-";
+      marginStat.textContent = "-";
+      tripStat.textContent = "Waiting";
+      setStatus("Complete the form to calculate the EV range and route.");
+    }
+
+    async function calculate(event) {
+      event.preventDefault();
+      button.disabled = true;
+      button.textContent = "Calculating...";
+      layers.clearLayers();
+      setStatus("Looking up postcodes and calculating the driving route...");
+
+      try {
+        const selectedVehicle = vehicles.find((vehicle) => vehicle.id === vehicleSelect.value);
+        const year = Number(document.getElementById("year").value);
+
+        if (!selectedVehicle || !Number.isFinite(year)) {
+          throw new Error("Select a valid vehicle and manufacture year.");
+        }
+
+        const [start, destination] = await Promise.all([
+          lookupPostcode(document.getElementById("startPostcode").value),
+          lookupPostcode(document.getElementById("destinationPostcode").value)
+        ]);
+        setStatus("Loading detailed coastline geometry and calculating the driving route...");
+        const [route, landPolygons] = await Promise.all([
+          lookupRoute(start, destination),
+          loadUkIrelandLandPolygons()
+        ]);
+        const usableRangeKm = estimateRangeKm(selectedVehicle, year);
+        const routeDistanceKm = route.distance / 1000;
+        const marginKm = usableRangeKm - routeDistanceKm;
+        const marginPercent = (marginKm / usableRangeKm) * 100;
+
+        const rangeFeature = buildCoastlineClippedRangeFeature(start, usableRangeKm, landPolygons);
+        L.geoJSON(rangeFeature, {
+          style: {
+            color: successColor,
+            fillColor: successColor,
+            fillOpacity: 0.17,
+            opacity: 0.7,
+            weight: 2
+          }
+        }).addTo(layers).bindPopup(`Estimated maximum reachable area clipped to the UK and Ireland coastlines: ${formatMiles(usableRangeKm)}`);
+
+        landPolygons.forEach((landPolygon) => {
+          L.polyline(landPolygon[0].map((coord) => [coord[1], coord[0]]), {
+            color: successColor,
+            opacity: 0.35,
+            weight: 1,
+            interactive: false
+          }).addTo(layers);
+        });
+
+        L.geoJSON(route.geometry, {
+          style: {
+            color: marginKm >= 0 ? successColor : dangerColor,
+            weight: 6,
+            opacity: 0.9
+          }
+        }).addTo(layers).bindPopup(`Driving route: ${formatDistance(routeDistanceKm)}`);
+
+        L.marker([start.lat, start.lon], { icon: markerIcon("S", "") })
+          .addTo(layers)
+          .bindPopup(`<strong>Start</strong><br>${start.postcode}`);
+
+        L.marker([destination.lat, destination.lon], { icon: markerIcon("D", "destination") })
+          .addTo(layers)
+          .bindPopup(`<strong>Destination</strong><br>${destination.postcode}`);
+
+        const bounds = layers.getBounds();
+        if (bounds.isValid()) {
+          map.fitBounds(bounds.pad(0.16));
+        }
+
+        rangeStat.textContent = formatMiles(usableRangeKm);
+        distanceStat.textContent = formatDistance(routeDistanceKm);
+        marginStat.textContent = `${marginKm >= 0 ? "+" : ""}${Math.round(kmToMiles(marginKm)).toLocaleString("en-GB")} mi`;
+
+        if (marginKm >= 0) {
+          tripStat.textContent = "Reachable";
+          setStatus(`This route is within the estimated usable range for a ${selectedVehicle.label}. Estimated remaining battery range is about ${formatMiles(marginKm)} (${Math.max(0, Math.round(marginPercent))}% of usable range).`, "good");
+        } else {
+          const shortfall = Math.abs(marginKm);
+          const chargeStops = Math.max(1, Math.ceil(routeDistanceKm / usableRangeKm) - 1);
+          tripStat.textContent = "Charging needed";
+          setStatus(`This route is longer than the estimated usable range by about ${formatMiles(shortfall)}. Plan at least ${chargeStops} charging stop${chargeStops === 1 ? "" : "s"} along the route.`, "warn");
+        }
+      } catch (error) {
+        resetStats();
+        tripStat.textContent = "Error";
+        setStatus(error.message || "Something went wrong while calculating the EV route.", "bad");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Calculate route and range";
+      }
+    }
+
+    form.addEventListener("submit", calculate);
+  </script>
+</body>
+</html>
